@@ -135,9 +135,18 @@ class FP16_Optimizer(object):
         norm_groups = []
         skip = False
         for i, group in enumerate(self.fp16_groups):
-            grads_groups_flat.append(_flatten_dense_tensors([p.grad for p in group]))
+            group_grad = []
+            for p in group:
+                if p.grad is None:
+                    group_grad.append(torch.zeros(
+                        p.size(), dtype=p.dtype, device=p.device))
+                else:
+                    group_grad.append(p.grad)
+            grads_groups_flat.append(_flatten_dense_tensors(group_grad))
+
+            # grads_groups_flat.append(_flatten_dense_tensors([p.grad for p in group]))
             norm_groups.append(self._compute_grad_norm(grads_groups_flat[i]))
-            if norm_groups[i] == -1: #TODO: early break
+            if norm_groups[i] == -1:  # TODO: early break
                 skip = True
 
         if skip:
@@ -152,8 +161,9 @@ class FP16_Optimizer(object):
 
         # TODO: we probably don't need this? just to be safe
         for i in range(len(norm_groups)):
-            updated_params = _unflatten_dense_tensors(self.fp16_groups_flat[i], self.fp16_groups[i])
-            for p,q in zip(self.fp16_groups[i], updated_params):
+            updated_params = _unflatten_dense_tensors(
+                self.fp16_groups_flat[i], self.fp16_groups[i])
+            for p, q in zip(self.fp16_groups[i], updated_params):
                 p.data = q.data
 
         self._update_scale(False)
